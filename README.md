@@ -20,6 +20,7 @@ SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 SPOTIFY_REDIRECT_URI=http://localhost:3000/callback
 SESSION_SECRET=your_session_secret
+PORT=application_port_here
 ```
 
 - `SPOTIFY_CLIENT_ID`: Your Spotify app's client ID
@@ -30,4 +31,4 @@ SESSION_SECRET=your_session_secret
 
 You will need to register your app at https://developer.spotify.com/dashboard to get your Client ID and Secret.
 
-*** This is a test project using github copilot, this may or may not be updated in future ****
+### This is a test project using github copilot, this may or may not be updated in future
