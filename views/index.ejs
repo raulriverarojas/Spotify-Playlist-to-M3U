@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Spotify Playlist to M3U/M3U8</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+</pre>
+  <div class="container">
+    <h1>Spotify Playlist to M3U/M3U8</h1>
+    <div class="tabs">
+      <div class="tab active" id="tab-link">Convert by Link</div>
+      <div class="tab" id="tab-login">My Playlists</div>
+    </div>
+    <div class="tab-content active" id="content-link">
+      <form method="POST" action="/convert">
+        <div class="form-row">
+          <input type="text" name="playlistUrl" placeholder="Enter Spotify Playlist Link" required style="width: 60%;">
+          <select name="format">
+            <% nameFormats.forEach(function(fmt) { %>
+              <option value="<%= fmt.value %>"><%= fmt.label %></option>
+            <% }); %>
+          </select>
+          <button type="submit">Convert</button>
+        </div>
+      </form>
+      <div style="margin: 10px 0; color: #ccc; font-size: 0.95em;">
+        <b>Song Name Format:</b> Choose how each song will be displayed in the playlist file.
+      </div>
+      <% if (error) { %>
+        <div class="error"><%= error %></div>
+      <% } %>
+      <% if (tracks) { %>
+        <h2>Tracks</h2>
+        <ul>
+          <% tracks.forEach(function(track) { %>
+            <li><%= track %></li>
+          <% }); %>
+        </ul>
+  <h2>Download</h2>
+  <a href="data:text/plain;charset=utf-8,<%= encodeURIComponent(m3u) %>" download="<%= tracks && tracks.length && playlistName ? playlistName + '.m3u' : 'playlist.m3u' %>">Download M3U</a> |
+  <a href="data:text/plain;charset=utf-8,<%= encodeURIComponent(m3u8) %>" download="<%= tracks && tracks.length && playlistName ? playlistName + '.m3u8' : 'playlist.m3u8' %>">Download M3U8</a>
+      <% } %>
+    </div>
+    <div class="tab-content" id="content-login">
+      <div style="display: flex; justify-content: center; margin-bottom: 24px;">
+        <form method="GET" action="/login" style="display:inline-block;">
+          <button type="submit">Login with Spotify</button>
+        </form>
+      </div>
+      <% if (userPlaylists) { %>
+        <h2>Your Playlists</h2>
+        <div style="margin-bottom: 18px;">
+          <label for="globalFormat"><b>Song Name Format:</b></label>
+          <select id="globalFormat" style="margin-left:10px;">
+            <% nameFormats.forEach(function(fmt) { %>
+              <option value="<%= fmt.value %>"><%= fmt.label %></option>
+            <% }); %>
+          </select>
+        </div>
+        <ul style="margin-bottom: 30px;">
+          <% userPlaylists.forEach(function(pl, idx) { %>
+            <li style="margin-bottom: 18px;">
+              <b><%= pl.name %></b> (<%= pl.tracks.total %> tracks)
+              <form method="POST" action="/convert" style="display:inline-block; margin-left:10px;">
+                <input type="hidden" name="playlistUrl" value="https://open.spotify.com/playlist/<%= pl.id %>" />
+                <input type="hidden" name="format" class="format-input" value="artist-title" />
+                <input type="hidden" name="directDownload" value="1" />
+                <button type="submit">Download M3U</button>
+              </form>
+              <form method="POST" action="/convert" style="display:inline-block; margin-left:10px;">
+                <input type="hidden" name="playlistUrl" value="https://open.spotify.com/playlist/<%= pl.id %>" />
+                <input type="hidden" name="format" class="format-input" value="artist-title" />
+                <input type="hidden" name="m3u8" value="1" />
+                <button type="submit">Download M3U8</button>
+              </form>
+              <button class="preview-btn" data-id="<%= pl.id %>" style="margin-left:10px;">Preview</button>
+            </li>
+          <% }); %>
+        </ul>
+        <div id="preview-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+          <div style="background:#222; color:#fff; padding:30px; border-radius:10px; max-width:500px; max-height:80vh; overflow:auto; position:relative;">
+            <button id="close-preview" style="position:absolute; top:10px; right:10px; background:#1db954; color:#fff; border:none; border-radius:5px; padding:5px 10px; cursor:pointer;">Close</button>
+            <h3 id="preview-title"></h3>
+            <ul id="preview-tracks"></ul>
+          </div>
+        </div>
+      <% } %>
+        <script>
+          // Set all format inputs to match global format
+          function updateFormatInputs() {
+            var val = document.getElementById('globalFormat').value;
+            document.querySelectorAll('.format-input').forEach(function(input) {
+              input.value = val;
+            });
+          }
+          document.getElementById('globalFormat').onchange = updateFormatInputs;
+          updateFormatInputs();
+
+          // Preview button uses selected format
+          document.querySelectorAll('.preview-btn').forEach(function(btn) {
+            btn.onclick = async function(e) {
+              e.preventDefault();
+              const playlistId = btn.getAttribute('data-id');
+              const format = document.getElementById('globalFormat').value;
+              const resp = await fetch(`/playlist-tracks/${playlistId}?format=${encodeURIComponent(format)}`);
+              const data = await resp.json();
+              document.getElementById('preview-title').innerText = data.name + ' (' + data.tracks.length + ' tracks)';
+              const ul = document.getElementById('preview-tracks');
+              ul.innerHTML = '';
+              data.tracks.forEach(function(t) {
+                const li = document.createElement('li');
+                li.innerText = t;
+                ul.appendChild(li);
+              });
+              document.getElementById('preview-modal').style.display = 'flex';
+            };
+          });
+          document.getElementById('close-preview').onclick = function() {
+            document.getElementById('preview-modal').style.display = 'none';
+          };
+        </script>
+      <% if (playlistError) { %>
+        <div class="error"><%= playlistError %></div>
+      <% } %>
+    </div>
+  <!-- No dev info shown on UI -->
+  </div>
+  <script>
+    // Simple tab switching
+    function activateTab(tab) {
+      if (tab === 'playlists') {
+        document.getElementById('tab-login').classList.add('active');
+        document.getElementById('tab-link').classList.remove('active');
+        document.getElementById('content-login').classList.add('active');
+        document.getElementById('content-link').classList.remove('active');
+      } else {
+        document.getElementById('tab-link').classList.add('active');
+        document.getElementById('tab-login').classList.remove('active');
+        document.getElementById('content-link').classList.add('active');
+        document.getElementById('content-login').classList.remove('active');
+      }
+    }
+    document.getElementById('tab-link').onclick = function() { activateTab('link'); };
+    document.getElementById('tab-login').onclick = function() { activateTab('playlists'); };
+    // On page load, check for ?tab=playlists
+    if (window.location.search.indexOf('tab=playlists') !== -1) {
+      activateTab('playlists');
+    }
+  </script>
+</body>
+</html>
