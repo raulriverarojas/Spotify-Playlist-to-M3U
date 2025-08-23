@@ -26,5 +26,8 @@ SESSION_SECRET=your_session_secret
 - `SPOTIFY_CLIENT_SECRET`: Your Spotify app's client secret
 - `SPOTIFY_REDIRECT_URI`: The redirect URI set in your Spotify app (should match this value)
 - `SESSION_SECRET`: Any random string for session encryption
+- `PORT`: Any port you want to run applicatio on
 
 You will need to register your app at https://developer.spotify.com/dashboard to get your Client ID and Secret.
+
+*** This is a test project using github copiot, this may or may not be updated in future ****
