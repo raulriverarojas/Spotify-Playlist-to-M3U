@@ -30,4 +30,4 @@ SESSION_SECRET=your_session_secret
 
 You will need to register your app at https://developer.spotify.com/dashboard to get your Client ID and Secret.
 
-*** This is a test project using github copiot, this may or may not be updated in future ****
+*** This is a test project using github copilot, this may or may not be updated in future ****
