@@ -67,7 +67,7 @@ app.get('/', async (req, res) => {
 });
 // Spotify OAuth login
 app.get('/login', (req, res) => {
-  const redirect_uri = process.env.REDIRECT_URI || 'http://localhost:3000/callback';
+  const redirect_uri = process.env.SPOTIFY_REDIRECT_URI || 'http://localhost:3000/callback';
   const scope = 'playlist-read-private playlist-read-collaborative';
   const authUrl = 'https://accounts.spotify.com/authorize?' +
     querystring.stringify({
@@ -82,7 +82,7 @@ app.get('/login', (req, res) => {
 // Spotify OAuth callback
 app.get('/callback', async (req, res) => {
   const code = req.query.code || null;
-  const redirect_uri = process.env.REDIRECT_URI || 'http://localhost:3000/callback';
+  const redirect_uri = process.env.SPOTIFY_REDIRECT_URI || 'http://localhost:3000/callback';
   try {
     const tokenResp = await axios.post('https://accounts.spotify.com/api/token',
       querystring.stringify({
@@ -106,7 +106,7 @@ app.post('/convert', async (req, res) => {
   const format = req.body.format || 'artist-title';
   const isM3u8 = req.body.m3u8 === '1';
   const playlistId = extractPlaylistId(playlistUrl);
-  // Always pass userPlaylists and playlistError for EJS
+  console.log('Convert request:', { playlistUrl, playlistId, format, isM3u8 });
   let userPlaylists = null;
   let playlistError = null;
   if (req.session && req.session.access_token) {
@@ -123,17 +123,21 @@ app.post('/convert', async (req, res) => {
     return res.render('index', { error: 'Invalid Spotify playlist link.', tracks: null, m3u: null, m3u8: null, userPlaylists, playlistError, nameFormats: NAME_FORMATS });
   }
   try {
-    const token = await getSpotifyAccessToken();
-    // Fetch playlist name for filename
+    const token = req.session?.access_token || await getSpotifyAccessToken();
+    console.log('Using token');
     let playlistName = 'playlist';
     try {
+      console.log('Fetching playlist:', playlistId);
       const nameResp = await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}`, {
         headers: { Authorization: 'Bearer ' + token }
       });
+      console.log('Playlist response:', JSON.stringify(nameResp.data, null, 2));
       playlistName = nameResp.data.name ? nameResp.data.name.replace(/[^a-zA-Z0-9-_ ]/g, '') : 'playlist';
-    } catch {}
+    } catch (e) {
+      console.log('Error fetching playlist name:', e.message);
+    }
     let tracks = [];
-    let nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+    let nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=100`;
     while (nextUrl) {
       const resp = await axios.get(nextUrl, {
         headers: { Authorization: 'Bearer ' + token }
@@ -141,11 +145,14 @@ app.post('/convert', async (req, res) => {
       tracks = tracks.concat(resp.data.items);
       nextUrl = resp.data.next;
     }
+    console.log('Fetched tracks:', tracks.length);
     const trackList = tracks.map(item => {
-      const artist = item.track.artists.map(a => a.name).join(', ');
-      const title = item.track.name;
-      const album = item.track.album ? item.track.album.name : '';
-      const year = item.track.album && item.track.album.release_date ? item.track.album.release_date.substring(0, 4) : '';
+      const track = item.item;
+      if (!track) return null;
+      const artist = track.artists.map(a => a.name).join(', ');
+      const title = track.name;
+      const album = track.album ? track.album.name : '';
+      const year = track.album && track.album.release_date ? track.album.release_date.substring(0, 4) : '';
       switch (format) {
         case 'title-artist':
           return `${title} - ${artist}`;
@@ -165,7 +172,7 @@ app.post('/convert', async (req, res) => {
         default:
           return `${artist} - ${title}`;
       }
-    });
+    }).filter(Boolean);
     const m3u = '#EXTM3U\n' + trackList.map(t => `#EXTINF:-1,${t}\n`).join('');
     const m3u8 = '#EXTM3U\n' + trackList.map(t => `#EXTINF:-1,${t}\n`).join('');
     if (isM3u8) {
@@ -173,7 +180,6 @@ app.post('/convert', async (req, res) => {
       res.setHeader('Content-Type', 'audio/x-mpegurl');
       return res.send(m3u8);
     }
-    // If request is from My Playlists tab (has a hidden field 'directDownload'), send file directly
     if (req.body.directDownload === '1') {
       res.setHeader('Content-Disposition', `attachment; filename="${playlistName}.m3u"`);
       res.setHeader('Content-Type', 'audio/x-mpegurl');
@@ -181,7 +187,8 @@ app.post('/convert', async (req, res) => {
     }
   res.render('index', { error: null, tracks: trackList, m3u, m3u8, userPlaylists, playlistError, nameFormats: NAME_FORMATS, playlistName });
   } catch (e) {
-  res.render('index', { error: 'Failed to fetch playlist. Check credentials and playlist link.', tracks: null, m3u: null, m3u8: null, userPlaylists, playlistError, nameFormats: NAME_FORMATS });
+    console.log('Convert error:', e.message, e.response?.data);
+    res.render('index', { error: 'Failed to fetch playlist. Check credentials and playlist link.', tracks: null, m3u: null, m3u8: null, userPlaylists, playlistError, nameFormats: NAME_FORMATS });
   }
 });
 
@@ -195,7 +202,7 @@ app.get('/playlist-tracks/:id', async (req, res) => {
     const token = req.session.access_token;
     const format = req.query.format || 'artist-title';
     let tracks = [];
-    let nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+    let nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=100`;
     while (nextUrl) {
       const resp = await axios.get(nextUrl, {
         headers: { Authorization: 'Bearer ' + token }
@@ -208,9 +215,11 @@ app.get('/playlist-tracks/:id', async (req, res) => {
     });
     const playlistName = nameResp.data.name;
     const trackList = tracks.map(item => {
-      const artist = item.track.artists.map(a => a.name).join(', ');
-      const title = item.track.name;
-      const album = item.track.album ? item.track.album.name : '';
+      const track = item.item;
+      if (!track) return null;
+      const artist = track.artists.map(a => a.name).join(', ');
+      const title = track.name;
+      const album = track.album ? track.album.name : '';
       switch (format) {
         case 'title-artist':
           return `${title} - ${artist}`;
@@ -222,9 +231,10 @@ app.get('/playlist-tracks/:id', async (req, res) => {
         default:
           return `${artist} - ${title}`;
       }
-    });
+    }).filter(Boolean);
     res.json({ name: playlistName, tracks: trackList });
   } catch (e) {
+    console.log('Playlist tracks error:', e.message, e.response?.data);
     res.status(500).json({ error: 'Failed to fetch playlist tracks' });
   }
 });
